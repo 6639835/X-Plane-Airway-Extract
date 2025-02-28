@@ -22,13 +22,28 @@ def load_data(filepath, key_index, value_index, extra_condition_index=None, extr
         dict: A dictionary containing data from the file, filtered as specified.
     """
     data = {}
-    with open(filepath, 'r') as file:
-        for line in file:
-            parts = line.split()
-            if (extra_condition_index is None or (len(parts) > extra_condition_index and parts[extra_condition_index] in extra_condition_values)) and \
-               (type_index is None or (len(parts) > type_index and parts[type_index] == type_value)):
-                if len(parts) > max(key_index, value_index):
-                    data[parts[key_index]] = parts[value_index]
+    try:
+        with open(filepath, 'r') as file:
+            for line in file:
+                parts = line.split()
+                if not parts: # Skip empty lines
+                    continue
+                # Check extra condition if provided
+                extra_condition_met = (extra_condition_index is None or
+                                       (len(parts) > extra_condition_index and parts[extra_condition_index] in extra_condition_values))
+                # Check type condition if provided
+                type_condition_met = (type_index is None or
+                                      (len(parts) > type_index and parts[type_index] == type_value))
+
+                if extra_condition_met and type_condition_met:
+                    if len(parts) > max(key_index, value_index):
+                        data[parts[key_index].strip()] = parts[value_index].strip() #strip whitespace for keys and values
+    except FileNotFoundError:
+        print(f"Error: File not found at path: {filepath}")
+        return {} # Return empty dict in case of file not found
+    except IndexError:
+        print(f"Error: Index out of range while processing file: {filepath}. Check key_index, value_index, etc. against file structure.")
+        return {} # Return empty dict in case of index error
     return data
 
 def search_data(waypoint, data_dict):
@@ -42,7 +57,9 @@ def search_data(waypoint, data_dict):
     Returns:
         str or None: The value associated with the waypoint, or None if not found.
     """
-    return data_dict.get(waypoint, None)
+    if not waypoint: # Handle empty waypoint string
+        return None
+    return data_dict.get(waypoint.strip(), None) # strip waypoint to match keys in dict
 
 def sort_key(line):
     """
@@ -58,13 +75,43 @@ def sort_key(line):
     Returns:
         tuple: A sorting key tuple for complex sorting.
     """
-    last_part = line.split()[-1]
+    parts = line.split()
+    if not parts: # Handle empty line case
+        return ("", 0) # Return a default sort key for empty lines
+
+    last_part = parts[-1]
     match = re.match(r"([A-Z]+)(\d*)$", last_part)
     if match:
         letters, numbers = match.groups()
         numbers = int(numbers) if numbers else 0
         return (letters, numbers)
     return (last_part, float('inf'))
+
+def get_area_code(waypoint, waypoint_type, earth_fix_data, earth_nav_data):
+    """
+    Retrieves the area code for a waypoint based on its type and data dictionaries.
+
+    Args:
+        waypoint (str): The waypoint identifier.
+        waypoint_type (str): The type of waypoint ('DESIGNATED_POINT', 'VORDME', or other).
+        earth_fix_data (dict): Dictionary containing earth_fix data.
+        earth_nav_data (dict): Dictionary containing earth_nav data.
+
+    Returns:
+        tuple: Area code (str) and type code (str), or (None, None) if not found.
+    """
+    if waypoint_type == 'DESIGNATED_POINT':
+        type_code = '11'
+        area_data = earth_fix_data
+    elif waypoint_type == 'VORDME':
+        type_code = '3'
+        area_data = earth_nav_data
+    else:
+        type_code = '2'
+        area_data = earth_nav_data # Default to earth_nav_data for other types
+
+    area_code = search_data(waypoint, area_data)
+    return area_code, type_code
 
 def convert_csv_to_dat(csv_file, earth_fix_path, earth_nav_path, output_file):
     """
@@ -85,46 +132,69 @@ def convert_csv_to_dat(csv_file, earth_fix_path, earth_nav_path, output_file):
 
     output_lines = []
 
-    with open(csv_file, 'r', encoding='utf-8') as csvfile:
-        reader = csv.DictReader(csvfile)
-        total_rows = sum(1 for _ in reader)
-        csvfile.seek(0)
-        next(reader)
+    try:
+        with open(csv_file, 'r', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            if reader.fieldnames is None: # Check if CSV is empty or has no header
+                print(f"Warning: CSV file '{csv_file}' is empty or has no header. No data processed.")
+                return
 
-        for row in tqdm(reader, total=total_rows, desc="Processing Rows"):
-            first_part = row['CODE_POINT_START']
-            third_part = '11' if row['CODE_TYPE_START'] == 'DESIGNATED_POINT' else '3' if row['CODE_TYPE_START'] == 'VORDME' else '2'
-            second_part = search_data(first_part, earth_fix_data if third_part == '11' else earth_nav_data)
+            required_headers = ['CODE_POINT_START', 'CODE_TYPE_START', 'CODE_POINT_END', 'CODE_TYPE_END', 'CODE_DIR', 'TXT_DESIG']
+            missing_headers = [header for header in required_headers if header not in reader.fieldnames]
+            if missing_headers:
+                print(f"Error: CSV file '{csv_file}' is missing required headers: {missing_headers}. Please check the CSV file.")
+                return
 
-            if not second_part:
-                print(f"Warning: No area code found for {first_part}. Skipping row.")
-                continue
+            total_rows = sum(1 for _ in reader) # Efficiently count rows for tqdm
+            csvfile.seek(0) # Reset file pointer to the beginning
+            next(reader) # Skip header again after counting rows
 
-            fourth_part = row['CODE_POINT_END']
-            sixth_part = '11' if row['CODE_TYPE_END'] == 'DESIGNATED_POINT' else '3' if row['CODE_TYPE_END'] == 'VORDME' else '2'
-            fifth_part = search_data(fourth_part, earth_fix_data if sixth_part == '11' else earth_nav_data)
+            for row in tqdm(reader, total=total_rows, desc="Processing Rows"):
+                start_waypoint = row['CODE_POINT_START']
+                start_waypoint_type = row['CODE_TYPE_START']
+                end_waypoint = row['CODE_POINT_END']
+                end_waypoint_type = row['CODE_TYPE_END']
 
-            if not fifth_part:
-                print(f"Warning: No area code found for {fourth_part}. Skipping row.")
-                continue
+                start_area_code, start_type_code = get_area_code(start_waypoint, start_waypoint_type, earth_fix_data, earth_nav_data)
+                if not start_area_code:
+                    print(f"Warning: No area code found for start waypoint '{start_waypoint}'. Skipping row.")
+                    continue
 
-            seventh_part = 'N' if row['CODE_DIR'] == 'X' else row['CODE_DIR']
-            ninth_part = '0'
-            tenth_part = '600'
-            eleventh_part = row['TXT_DESIG']
+                end_area_code, end_type_code = get_area_code(end_waypoint, end_waypoint_type, earth_fix_data, earth_nav_data)
+                if not end_area_code:
+                    print(f"Warning: No area code found for end waypoint '{end_waypoint}'. Skipping row.")
+                    continue
 
-            for i in range(1, 3):
-                dat_line = (
-                    f"{first_part:>5}{second_part:>3}{third_part:>3}{fourth_part:>6}"
-                    f"{fifth_part:>3}{sixth_part:>3}{seventh_part:>2}{i:>2}{ninth_part:>4}"
-                    f"{tenth_part:>4} {eleventh_part}\n"
-                )
-                output_lines.append(dat_line)
+                direction_code = 'N' if row['CODE_DIR'] == 'X' else row['CODE_DIR']
+                designation_text = row['TXT_DESIG']
+
+                for i in range(1, 3): # Loop for creating two output lines
+                    dat_line = (
+                        f"{start_waypoint:>5}{start_area_code:>3}{start_type_code:>3}{end_waypoint:>6}"
+                        f"{end_area_code:>3}{end_type_code:>3}{direction_code:>2}{i:>2}{'0':>4}"
+                        f"{'600':>4} {designation_text}\n"
+                    )
+                    output_lines.append(dat_line)
+
+    except FileNotFoundError:
+        print(f"Error: CSV file not found at path: {csv_file}")
+        return
+    except KeyError as e:
+        print(f"Error: Missing column in CSV file: {e}. Please check CSV headers.")
+        return
+    except Exception as e: # Catch other potential CSV reading errors
+        print(f"An unexpected error occurred while processing CSV file: {e}")
+        return
+
 
     output_lines.sort(key=sort_key)
 
-    with open(output_file, 'w') as datfile:
-        datfile.writelines(output_lines)
+    try:
+        with open(output_file, 'w') as datfile:
+            datfile.writelines(output_lines)
+    except Exception as e:
+        print(f"Error writing to output file '{output_file}': {e}")
+        return
 
     print("Processing completed!")
 
