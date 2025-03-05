@@ -200,7 +200,7 @@ def convert_csv_to_dat(csv_file, earth_fix_path, earth_nav_path, output_file):
 
 
 # Example usage (paths remain unchanged)
-csv_file = '/RTE_SEG.csv'
+csv_file = 'RTE_SEG.csv'
 earth_fix_path = 'earth_fix.dat'
 earth_nav_path = 'earth_nav.dat'
 output_file = 'output.dat'
