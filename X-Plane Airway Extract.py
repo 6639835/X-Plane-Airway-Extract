@@ -1,84 +1,177 @@
 import csv
 import re
+import os
+import logging
 from tqdm import tqdm
+from typing import Dict, List, Optional, Set, Tuple
+from dataclasses import dataclass
+from enum import Enum
 
-def load_data(filepath, key_index, value_index, extra_condition_index=None, extra_condition_values=None, type_index=None, type_value=None):
-    """
-    Loads data from a space-separated file into a dictionary, with optional filtering.
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
-    This function reads a file, splits each line into parts, and creates a dictionary.
-    It allows for filtering lines based on values in specified columns.
+class NavigationType(Enum):
+    DESIGNATED_POINT = ('DESIGNATED_POINT', '11')
+    VORDME = ('VORDME', '3')
+    NDB = ('NDB', '2')
 
+    def __init__(self, code_type: str, type_code: str):
+        self.code_type = code_type
+        self.type_code = type_code
+
+@dataclass
+class NavigationPoint:
+    identifier: str
+    type: NavigationType
+    area_code: Optional[str] = None
+
+def get_navigation_type(code_type: str) -> Optional[NavigationType]:
+    """Get the navigation type from the code type string.
+    
     Args:
-        filepath (str): The path to the input file.
-        key_index (int): Index of the column for dictionary keys.
-        value_index (int): Index of the column for dictionary values.
-        extra_condition_index (int, optional): Index of a column for additional filtering condition.
-        extra_condition_values (list of str, optional): Allowed values in the `extra_condition_index` column.
-        type_index (int, optional): Index of a column to check for a specific type value.
-        type_value (str, optional): Value to match in the `type_index` column.
-
+        code_type: String representing the navigation type code
+        
     Returns:
-        dict: A dictionary containing data from the file, filtered as specified.
+        NavigationType enum if found, None otherwise
+    """
+    if not code_type:
+        logging.error("Empty code type provided")
+        return None
+        
+    for nav_type in NavigationType:
+        if nav_type.code_type == code_type:
+            return nav_type
+    logging.warning(f"Unknown navigation type encountered: {code_type}")
+    return None
+
+def process_navigation_point(
+    identifier: str,
+    code_type: str,
+    earth_fix_data: Dict[str, str],
+    earth_nav_data: Dict[str, str]
+) -> Optional[NavigationPoint]:
+    """Process a navigation point and return its details.
+    
+    Args:
+        identifier: The navigation point identifier
+        code_type: The type of navigation point
+        earth_fix_data: Dictionary of fix point data
+        earth_nav_data: Dictionary of navigation point data
+        
+    Returns:
+        NavigationPoint object if valid, None otherwise
+    """
+    if not identifier:
+        logging.error("Empty identifier provided")
+        return None
+        
+    nav_type = get_navigation_type(code_type)
+    if not nav_type:
+        return None
+
+    # Get area code based on navigation type
+    area_code = None
+    if nav_type == NavigationType.DESIGNATED_POINT:
+        area_code = earth_fix_data.get(identifier)
+        if not area_code:
+            logging.warning(f"No area code found for fix point {identifier}")
+    else:  # VORDME or NDB
+        area_code = earth_nav_data.get(identifier)
+        if not area_code:
+            logging.warning(f"No area code found for {nav_type.code_type} point {identifier}")
+
+    if not area_code:
+        return None
+
+    return NavigationPoint(
+        identifier=identifier,
+        type=nav_type,
+        area_code=area_code
+    )
+
+def load_fixed_width_data(filepath: str, key_index: int, value_index: int, 
+                          extra_condition_index: Optional[int] = None, 
+                          extra_condition_values: Optional[Set[str]] = None,
+                          type_index: Optional[int] = None, 
+                          type_value: Optional[str] = None) -> Dict[str, str]:
+    """
+    Load data from a fixed-width file into a dictionary.
+    
+    Args:
+        filepath: Path to the data file
+        key_index: Column index to use as dictionary key
+        value_index: Column index to use as dictionary value
+        extra_condition_index: Optional index for filtering data
+        extra_condition_values: Set of accepted values for the extra condition
+        type_index: Optional index for type filtering
+        type_value: Value to match for type filtering
+        
+    Returns:
+        Dictionary mapping keys to values from the specified file
     """
     data = {}
     try:
-        with open(filepath, 'r') as file:
-            for line in file:
-                parts = line.split()
-                if not parts: # Skip empty lines
+        if not os.path.exists(filepath):
+            logging.error(f"File not found: {filepath}")
+            return {}
+            
+        with open(filepath, 'r', encoding='utf-8') as file:
+            for line_num, line in enumerate(file, 1):
+                line = line.strip()
+                if not line:  # Skip empty lines
                     continue
-                # Check extra condition if provided
-                extra_condition_met = (extra_condition_index is None or
-                                       (len(parts) > extra_condition_index and parts[extra_condition_index] in extra_condition_values))
-                # Check type condition if provided
-                type_condition_met = (type_index is None or
-                                      (len(parts) > type_index and parts[type_index] == type_value))
+                    
+                parts = line.split()
+                if len(parts) <= max(key_index, value_index):
+                    logging.warning(f"Line {line_num} has insufficient columns: {line}")
+                    continue
+                    
+                # Check conditions
+                condition_met = True
+                if extra_condition_index is not None and extra_condition_values is not None:
+                    if len(parts) <= extra_condition_index or parts[extra_condition_index] not in extra_condition_values:
+                        condition_met = False
+                        
+                if type_index is not None and type_value is not None:
+                    if len(parts) <= type_index or parts[type_index] != type_value:
+                        condition_met = False
+                
+                if condition_met:
+                    key = parts[key_index]
+                    value = parts[value_index]
+                    data[key] = value
+                    
+        logging.info(f"Successfully loaded {len(data)} entries from {filepath}")
+        return data
+        
+    except Exception as e:
+        logging.error(f"Error loading data from {filepath}: {str(e)}")
+        return {}
 
-                if extra_condition_met and type_condition_met:
-                    if len(parts) > max(key_index, value_index):
-                        data[parts[key_index].strip()] = parts[value_index].strip() #strip whitespace for keys and values
-    except FileNotFoundError:
-        print(f"Error: File not found at path: {filepath}")
-        return {} # Return empty dict in case of file not found
-    except IndexError:
-        print(f"Error: Index out of range while processing file: {filepath}. Check key_index, value_index, etc. against file structure.")
-        return {} # Return empty dict in case of index error
-    return data
 
-def search_data(waypoint, data_dict):
+def sort_key(line: str) -> tuple:
     """
-    Searches for a waypoint in a dictionary and returns its value.
-
+    Extract sort key from a line based on the last component.
+    
     Args:
-        waypoint (str): The key to search for.
-        data_dict (dict): The dictionary to search in.
-
+        line: Text line to analyze
+        
     Returns:
-        str or None: The value associated with the waypoint, or None if not found.
+        Tuple for sorting (letters, numbers)
+        
+    Raises:
+        ValueError: If the line is empty or invalid
     """
-    if not waypoint: # Handle empty waypoint string
-        return None
-    return data_dict.get(waypoint.strip(), None) # strip waypoint to match keys in dict
-
-def sort_key(line):
-    """
-    Defines a custom sorting key for lines based on the last part, handling alphanumeric sorting.
-
-    This function sorts lines based on the last space-separated part.
-    It handles cases where the last part is alphanumeric (e.g., "ABC123") by sorting
-    alphabetically by letters and then numerically by numbers.
-
-    Args:
-        line (str): A line of text to be sorted.
-
-    Returns:
-        tuple: A sorting key tuple for complex sorting.
-    """
+    if not line or not isinstance(line, str):
+        raise ValueError("Invalid input: line must be a non-empty string")
+        
     parts = line.split()
-    if not parts: # Handle empty line case
-        return ("", 0) # Return a default sort key for empty lines
-
+    if not parts:
+        raise ValueError("Empty line provided")
+        
     last_part = parts[-1]
     match = re.match(r"([A-Z]+)(\d*)$", last_part)
     if match:
@@ -87,122 +180,143 @@ def sort_key(line):
         return (letters, numbers)
     return (last_part, float('inf'))
 
-def get_area_code(waypoint, waypoint_type, earth_fix_data, earth_nav_data):
-    """
-    Retrieves the area code for a waypoint based on its type and data dictionaries.
 
+def convert_csv_to_dat(csv_file: str, earth_fix_path: str, earth_nav_path: str, output_file: str) -> None:
+    """
+    Convert navigation data from CSV format to X-Plane DAT format.
+    
     Args:
-        waypoint (str): The waypoint identifier.
-        waypoint_type (str): The type of waypoint ('DESIGNATED_POINT', 'VORDME', or other).
-        earth_fix_data (dict): Dictionary containing earth_fix data.
-        earth_nav_data (dict): Dictionary containing earth_nav data.
-
-    Returns:
-        tuple: Area code (str) and type code (str), or (None, None) if not found.
+        csv_file: Path to input CSV file
+        earth_fix_path: Path to earth_fix.dat reference file
+        earth_nav_path: Path to earth_nav.dat reference file
+        output_file: Path for output DAT file
+        
+    Raises:
+        FileNotFoundError: If any input file is not found
+        ValueError: If input files are invalid
     """
-    if waypoint_type == 'DESIGNATED_POINT':
-        type_code = '11'
-        area_data = earth_fix_data
-    elif waypoint_type == 'VORDME':
-        type_code = '3'
-        area_data = earth_nav_data
-    else:
-        type_code = '2'
-        area_data = earth_nav_data # Default to earth_nav_data for other types
-
-    area_code = search_data(waypoint, area_data)
-    return area_code, type_code
-
-def convert_csv_to_dat(csv_file, earth_fix_path, earth_nav_path, output_file):
-    """
-    Converts a CSV file to a DAT format, enriching data with area codes from earth_fix.dat and earth_nav.dat.
-
-    This function reads route segment data from a CSV file, looks up area codes for start and end waypoints
-    in `earth_fix.dat` or `earth_nav.dat` based on waypoint types, and writes the processed data to a DAT file.
-
-    Args:
-        csv_file (str): Path to the input CSV file.
-        earth_fix_path (str): Path to the earth_fix.dat file.
-        earth_nav_path (str): Path to the earth_nav.dat file.
-        output_file (str): Path to the output DAT file to be created.
-    """
-    # Load earth_fix.dat and earth_nav.dat into dictionaries
-    earth_fix_data = load_data(earth_fix_path, 2, 4, 3, ["ENRT"], 3, "ENRT")
-    earth_nav_data = load_data(earth_nav_path, 7, 9, 8, ["ENRT"], 8, "ENRT")
-
+    # Validate input files
+    for file_path in [csv_file, earth_fix_path, earth_nav_path]:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+    
+    # Load reference data
+    logging.info("Loading reference data...")
+    earth_fix_data = load_fixed_width_data(
+        earth_fix_path, 2, 4, 3, {"ENRT"}, 3, "ENRT"
+    )
+    earth_nav_data = load_fixed_width_data(
+        earth_nav_path, 7, 9, 8, {"ENRT"}, 8, "ENRT"
+    )
+    
+    if not earth_fix_data or not earth_nav_data:
+        raise ValueError("Failed to load reference data")
+        
+    logging.info(f"Loaded {len(earth_fix_data)} fix points and {len(earth_nav_data)} nav points")
+    
     output_lines = []
+    skipped_rows = 0
+    processed_rows = 0
 
     try:
         with open(csv_file, 'r', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile)
-            if reader.fieldnames is None: # Check if CSV is empty or has no header
-                print(f"Warning: CSV file '{csv_file}' is empty or has no header. No data processed.")
-                return
-
-            required_headers = ['CODE_POINT_START', 'CODE_TYPE_START', 'CODE_POINT_END', 'CODE_TYPE_END', 'CODE_DIR', 'TXT_DESIG']
-            missing_headers = [header for header in required_headers if header not in reader.fieldnames]
-            if missing_headers:
-                print(f"Error: CSV file '{csv_file}' is missing required headers: {missing_headers}. Please check the CSV file.")
-                return
-
-            total_rows = sum(1 for _ in reader) # Efficiently count rows for tqdm
-            csvfile.seek(0) # Reset file pointer to the beginning
-            next(reader) # Skip header again after counting rows
-
-            for row in tqdm(reader, total=total_rows, desc="Processing Rows"):
-                start_waypoint = row['CODE_POINT_START']
-                start_waypoint_type = row['CODE_TYPE_START']
-                end_waypoint = row['CODE_POINT_END']
-                end_waypoint_type = row['CODE_TYPE_END']
-
-                start_area_code, start_type_code = get_area_code(start_waypoint, start_waypoint_type, earth_fix_data, earth_nav_data)
-                if not start_area_code:
-                    print(f"Warning: No area code found for start waypoint '{start_waypoint}'. Skipping row.")
+            required_fields = {'CODE_POINT_START', 'CODE_TYPE_START', 'CODE_POINT_END', 
+                             'CODE_TYPE_END', 'CODE_DIR', 'TXT_DESIG'}
+            
+            # Validate CSV header
+            if not all(field in reader.fieldnames for field in required_fields):
+                raise ValueError(f"CSV file missing required fields: {required_fields}")
+            
+            for row in tqdm(reader, desc="Processing Rows"):
+                processed_rows += 1
+                
+                # Validate required fields
+                if not all(row.get(field) for field in required_fields):
+                    logging.warning(f"Row {processed_rows} missing required fields")
+                    skipped_rows += 1
+                    continue
+                
+                # Process start point
+                start_point = process_navigation_point(
+                    identifier=row['CODE_POINT_START'],
+                    code_type=row['CODE_TYPE_START'],
+                    earth_fix_data=earth_fix_data,
+                    earth_nav_data=earth_nav_data
+                )
+                
+                if not start_point:
+                    skipped_rows += 1
                     continue
 
-                end_area_code, end_type_code = get_area_code(end_waypoint, end_waypoint_type, earth_fix_data, earth_nav_data)
-                if not end_area_code:
-                    print(f"Warning: No area code found for end waypoint '{end_waypoint}'. Skipping row.")
+                # Use the processed data
+                first_part = start_point.identifier
+                second_part = start_point.area_code
+                third_part = start_point.type.type_code
+
+                # End point processing
+                fourth_part = row['CODE_POINT_END']
+                
+                if row['CODE_TYPE_END'] == 'DESIGNATED_POINT':
+                    sixth_part = '11'
+                    fifth_part = earth_fix_data.get(fourth_part)
+                elif row['CODE_TYPE_END'] == 'VORDME':
+                    sixth_part = '3'
+                    fifth_part = earth_nav_data.get(fourth_part)
+                else:  # Assuming VOR
+                    sixth_part = '2'
+                    fifth_part = earth_nav_data.get(fourth_part)
+
+                if not fifth_part:
+                    logging.warning(f"No area code found for end point {fourth_part}. Skipping row.")
+                    skipped_rows += 1
                     continue
 
-                direction_code = 'N' if row['CODE_DIR'] == 'X' else row['CODE_DIR']
-                designation_text = row['TXT_DESIG']
-
-                for i in range(1, 3): # Loop for creating two output lines
+                # Direction
+                seventh_part = 'N' if row['CODE_DIR'] == 'X' else row['CODE_DIR']
+                
+                # Fixed values
+                ninth_part = '0'
+                tenth_part = '600'
+                eleventh_part = row['TXT_DESIG']
+                
+                # Generate both directions of the airway
+                for i in range(1, 3):
                     dat_line = (
-                        f"{start_waypoint:>5}{start_area_code:>3}{start_type_code:>3}{end_waypoint:>6}"
-                        f"{end_area_code:>3}{end_type_code:>3}{direction_code:>2}{i:>2}{'0':>4}"
-                        f"{'600':>4} {designation_text}\n"
+                        f"{first_part:>5}{second_part:>3}{third_part:>3}{fourth_part:>6}"
+                        f"{fifth_part:>3}{sixth_part:>3}{seventh_part:>2}{i:>2}{ninth_part:>4}"
+                        f"{tenth_part:>4} {eleventh_part}\n"
                     )
                     output_lines.append(dat_line)
 
-    except FileNotFoundError:
-        print(f"Error: CSV file not found at path: {csv_file}")
-        return
-    except KeyError as e:
-        print(f"Error: Missing column in CSV file: {e}. Please check CSV headers.")
-        return
-    except Exception as e: # Catch other potential CSV reading errors
-        print(f"An unexpected error occurred while processing CSV file: {e}")
-        return
+        # Sort and write output
+        try:
+            output_lines.sort(key=sort_key)
+            
+            # Ensure output directory exists
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            
+            with open(output_file, 'w', encoding='utf-8') as datfile:
+                datfile.writelines(output_lines)
 
-
-    output_lines.sort(key=sort_key)
-
-    try:
-        with open(output_file, 'w') as datfile:
-            datfile.writelines(output_lines)
+            logging.info(f"Processing completed! Wrote {len(output_lines)} lines to {output_file}")
+            if skipped_rows > 0:
+                logging.warning(f"Skipped {skipped_rows} rows due to missing or invalid data")
+                
+        except Exception as e:
+            logging.error(f"Error writing output file: {str(e)}")
+            raise
+            
     except Exception as e:
-        print(f"Error writing to output file '{output_file}': {e}")
-        return
-
-    print("Processing completed!")
+        logging.error(f"Error during processing: {str(e)}")
+        raise
 
 
-# Example usage (paths remain unchanged)
-csv_file = 'RTE_SEG.csv'
-earth_fix_path = 'earth_fix.dat'
-earth_nav_path = 'earth_nav.dat'
-output_file = 'output.dat'
-
-convert_csv_to_dat(csv_file, earth_fix_path, earth_nav_path, output_file)
+if __name__ == "__main__":
+    # Example usage - replace with your paths or use command line arguments
+    csv_file = '/Users/lujuncheng/Downloads/RTE_SEG.csv'
+    earth_fix_path = '/Users/lujuncheng/Library/Application Support/Steam/steamapps/common/X-Plane 12/Custom Data/earth_fix.dat'
+    earth_nav_path = '/Users/lujuncheng/Library/Application Support/Steam/steamapps/common/X-Plane 12/Custom Data/earth_nav.dat'
+    output_file = '/Users/lujuncheng/Downloads/PMDG NavData/airway2503.dat'
+    
+    convert_csv_to_dat(csv_file, earth_fix_path, earth_nav_path, output_file)
