@@ -10,18 +10,18 @@ A powerful utility that saves X-Plane enthusiasts countless hours by automating 
 
 ## 📋 Table of Contents
 
-- [🚀 Introduction](#introduction)
-- [✨ Features](#features)
-- [📥 Installation](#installation)
-- [🔧 Usage](#usage)
-- [📊 Data Formats](#data-formats)
-- [📝 Examples](#examples)
-- [❓ FAQ](#faq)
-- [👥 Contributing](#contributing)
-- [📜 License](#license)
-- [🙏 Acknowledgments](#acknowledgments)
-- [🔍 Troubleshooting](#troubleshooting)
-- [📞 Contact](#contact)
+- [🚀 Introduction](#-introduction)
+- [✨ Features](#-features)
+- [📥 Installation](#-installation)
+- [🔧 Usage](#-usage)
+- [📊 Data Formats](#-data-formats)
+- [📝 Examples](#-examples)
+- [❓ FAQ](#-faq)
+- [👥 Contributing](#-contributing)
+- [📜 License](#-license)
+- [🙏 Acknowledgments](#-acknowledgments)
+- [🔍 Troubleshooting](#-troubleshooting)
+- [📞 Contact](#-contact)
 
 ## 🚀 Introduction
 
