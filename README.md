@@ -251,7 +251,7 @@ For support, questions, or just to share your success stories:
 ---
 
 <p align="center">
-  <img src="https://static.wikia.nocookie.net/flight/images/d/d4/XPlane12-Placeholder.png/revision/latest?cb=20210927132744" alt="X-Plane Logo" width="100" height="100">
+  <img src="https://static.wikia.nocookie.net/flight/images/d/d4/XPlane12-Placeholder.png/revision/latest?cb=20210927132744" alt="X-Plane Logo" width="1280" height="720">
   <br>
   <i>Happy Flying!</i>
 </p>
