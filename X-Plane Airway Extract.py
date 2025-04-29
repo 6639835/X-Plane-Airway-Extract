@@ -314,9 +314,9 @@ def convert_csv_to_dat(csv_file: str, earth_fix_path: str, earth_nav_path: str, 
 
 if __name__ == "__main__":
     # Example usage - replace with your paths or use command line arguments
-    csv_file = '/Users/lujuncheng/Downloads/RTE_SEG.csv'
-    earth_fix_path = '/Users/lujuncheng/Library/Application Support/Steam/steamapps/common/X-Plane 12/Custom Data/earth_fix.dat'
-    earth_nav_path = '/Users/lujuncheng/Library/Application Support/Steam/steamapps/common/X-Plane 12/Custom Data/earth_nav.dat'
-    output_file = '/Users/lujuncheng/Downloads/PMDG NavData/airway2503.dat'
+    csv_file = 'RTE_SEG.csv'
+    earth_fix_path = 'earth_fix.dat'
+    earth_nav_path = 'earth_nav.dat'
+    output_file = 'output.dat'
     
     convert_csv_to_dat(csv_file, earth_fix_path, earth_nav_path, output_file)
