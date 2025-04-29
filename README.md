@@ -46,6 +46,8 @@ Save hours of manual work and eliminate frustrating errors with this streamlined
 - **📊 Smart Output Organization**: Automatically sorts airway data for optimal X-Plane performance
 - **📝 Perfect X-Plane Formatting**: Includes all required headers and terminators in the output files
 - **🎯 High Performance**: Efficiently processes thousands of route segments in seconds
+- **🗺️ Region Filtering**: Automatically filter out airways from specific regions (e.g., Chinese airspace) while preserving the file structure
+- **🔄 Direct Updates**: Can directly update your existing earth_awy.dat file instead of creating a separate output file
 
 ## 📥 Installation
 
@@ -100,10 +102,21 @@ Customize the script by modifying these path variables:
 csv_file = '/path/to/your/RTE_SEG.csv'               # Your input CSV file
 earth_fix_path = '/path/to/your/earth_fix.dat'       # Earth fix reference file
 earth_nav_path = '/path/to/your/earth_nav.dat'       # Earth nav reference file
-output_file = '/path/to/your/output.dat'             # Where to save the result
+earth_awy_path = '/path/to/your/earth_awy.dat'       # Earth airways file to update
 ```
 
-**Pro Tip**: The `earth_fix.dat` and `earth_nav.dat` files can be found in your X-Plane installation directory, typically under `/X-Plane 12/Custom Data/` or `/X-Plane 11/Custom Data/`.
+**Pro Tip**: The reference dat files can be found in your X-Plane installation directory, typically under `/X-Plane 12/Custom Data/` or `/X-Plane 11/Custom Data/`.
+
+### Region Filtering
+
+The tool can automatically filter out airways from specific regions. By default, it filters out airways within Chinese airspace:
+
+```python
+# Define excluded areas (Chinese airspace)
+china_areas = {'ZB', 'ZG', 'ZY', 'ZS', 'ZW', 'ZJ', 'ZP', 'ZL', 'ZH', 'ZU'}
+```
+
+You can customize this set to include or exclude different regions as needed.
 
 ## 📊 Data Formats
 
@@ -135,6 +148,7 @@ EDDT DT 11 EDDH DT 11 N 1  0 600 Q123
 The tool needs these X-Plane reference files:
 - `earth_fix.dat` - Contains fix points and their area codes
 - `earth_nav.dat` - Contains navigation aids and their area codes
+- `earth_awy.dat` - The destination file for updated airways
 
 ## 📝 Examples
 
@@ -145,9 +159,12 @@ The tool needs these X-Plane reference files:
 python X-Plane-Airway.py
 
 # Console output:
-# 2025-04-29 10:15:23 - INFO - Loaded 80171 fix points and 4907 nav points
-# Processing Rows: 100%|██████████| 5280/5280 [00:08<00:00, 632.50it/s]
-# 2025-04-29 10:15:32 - INFO - Processing completed! Wrote 10558 lines to /path/to/output.dat
+# 2025-04-29 10:15:23 - INFO - Filtering airways from /path/to/earth_awy.dat...
+# Filtering Airways: 100%|██████████| 45280/45280 [00:05<00:00, 8562.50it/s] 
+# 2025-04-29 10:15:28 - INFO - Filtered 3257 airways from specified areas
+# 2025-04-29 10:15:28 - INFO - Loaded 80171 fix points and 4907 nav points
+# Processing Airways: 100%|██████████| 5280/5280 [00:08<00:00, 632.50it/s]
+# 2025-04-29 10:15:37 - INFO - Processing completed! Added 10558 airway segments to /path/to/earth_awy.dat
 ```
 
 ### Custom Paths Example
@@ -157,7 +174,7 @@ python X-Plane-Airway.py
 csv_file = '/Users/pilot/Documents/navdata/my_airways.csv'
 earth_fix_path = '/Applications/X-Plane 12/Custom Data/earth_fix.dat'
 earth_nav_path = '/Applications/X-Plane 12/Custom Data/earth_nav.dat'
-output_file = '/Users/pilot/Documents/navdata/custom_airways.dat'
+earth_awy_path = '/Applications/X-Plane 12/Custom Data/earth_awy.dat'
 ```
 
 ## ❓ FAQ
@@ -172,10 +189,13 @@ Currently, the tool processes one CSV file at a time. For multiple files, you wo
 The tool will log warnings about missing area codes and skip those route segments. Check your CSV for typos or verify that the waypoints exist in your X-Plane navigation data.
 
 ### Can I use this with older X-Plane versions?
-Yes! The tool is compatible with X-Plane 11 and 12, as long as you have the appropriate `earth_fix.dat` and `earth_nav.dat` files.
+Yes! The tool is compatible with X-Plane 11 and 12, as long as you have the appropriate reference files.
 
-### How large a CSV file can I process?
-The tool has been tested with CSV files containing over 10,000 route segments. Processing time depends on your computer's specifications, but it's typically very fast.
+### How does the region filtering work?
+The tool checks the area codes of both endpoints of each airway. If both endpoints are in the filtered regions (e.g., Chinese airspace), the airway is removed from the output.
+
+### What is X-Plane Extract Supplement.py?
+This is a companion script that provides additional functionality for extracting and processing X-Plane navigation data. It works alongside the main X-Plane Airway.py script. The Supplement offers a more streamlined process that can directly modify your earth_awy.dat file in a single operation - filtering out airways from specified regions (like Chinese airspace) and adding new routes from your CSV data. This provides an easier workflow for users who want to update their navigation data without creating intermediate files.
 
 ## 👥 Contributing
 
@@ -224,7 +244,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 #### "Missing Area Codes" Warnings
 - Check for typos in waypoint identifiers
 - Verify that the waypoints exist in your X-Plane navigation data
-- Make sure you're using the correct `earth_fix.dat` and `earth_nav.dat` files for your region
+- Make sure you're using the correct reference files for your region
 
 #### Performance Issues
 - For very large CSV files, ensure your computer has sufficient memory
