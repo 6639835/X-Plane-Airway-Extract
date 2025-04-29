@@ -2,6 +2,7 @@ import csv
 import re
 import os
 import logging
+import datetime
 from tqdm import tqdm
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass
@@ -123,6 +124,14 @@ def load_fixed_width_data(filepath: str, key_index: int, value_index: int,
                 line = line.strip()
                 if not line:  # Skip empty lines
                     continue
+                
+                # Skip header lines that start with 'I' or 'A' (X-Plane format headers)
+                if line_num == 1 and (line.startswith('I') or line.startswith('A')):
+                    continue
+                    
+                # Skip terminator lines ("99")
+                if line == "99":
+                    continue
                     
                 parts = line.split()
                 if len(parts) <= max(key_index, value_index):
@@ -179,6 +188,20 @@ def sort_key(line: str) -> tuple:
         numbers = int(numbers) if numbers else 0
         return (letters, numbers)
     return (last_part, float('inf'))
+
+
+def get_current_airac_cycle() -> str:
+    """
+    Get the current AIRAC cycle in YYMM format.
+    This is a simplified implementation - for production use,
+    you should use the correct AIRAC cycle from official sources.
+    
+    Returns:
+        String representing the current AIRAC cycle (e.g., '2504')
+    """
+    # This is a simplified approach - in production, use actual AIRAC dates
+    now = datetime.datetime.now()
+    return f"{now.year % 100:02d}{now.month:02d}"
 
 
 def convert_csv_to_dat(csv_file: str, earth_fix_path: str, earth_nav_path: str, output_file: str) -> None:
@@ -296,8 +319,18 @@ def convert_csv_to_dat(csv_file: str, earth_fix_path: str, earth_nav_path: str, 
             # Ensure output directory exists
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
             
+            # Prepare X-Plane header
+            airac_cycle = get_current_airac_cycle()
+            today = datetime.datetime.now().strftime("%Y%m%d")
+            header = f"I\n1100 Version - data cycle {airac_cycle}, build {today}, metadata AwyXP1100. Copyright (c) {datetime.datetime.now().year} Justin\n\n"
+            
             with open(output_file, 'w', encoding='utf-8') as datfile:
+                # Write header
+                datfile.write(header)
+                # Write data
                 datfile.writelines(output_lines)
+                # Add terminator line
+                datfile.write("99\n")
 
             logging.info(f"Processing completed! Wrote {len(output_lines)} lines to {output_file}")
             if skipped_rows > 0:
