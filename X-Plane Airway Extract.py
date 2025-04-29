@@ -192,15 +192,53 @@ def sort_key(line: str) -> tuple:
 def get_current_airac_cycle() -> str:
     """
     Get the current AIRAC cycle in YYMM format.
-    This is a simplified implementation - for production use,
-    you should use the correct AIRAC cycle from official sources.
+    
+    AIRAC cycles follow a 28-day cycle. Each cycle begins exactly 28 days after 
+    the previous one, with the first cycle of each year starting in late January.
     
     Returns:
         String representing the current AIRAC cycle (e.g., '2504')
     """
-    # This is a simplified approach - in production, use actual AIRAC dates
+    # AIRAC cycle rules:
+    # 1. Each cycle lasts exactly 28 days
+    # 2. We can calculate cycles from a known reference date
+    
+    # Use a known reference cycle as anchor point (2501 = 2025-01-23)
+    reference_date = datetime.datetime(2025, 1, 23)
+    reference_cycle = 2501
+    
+    # Get current date
     now = datetime.datetime.now()
-    return f"{now.year % 100:02d}{now.month:02d}"
+    
+    # Calculate days since reference date (can be negative if before reference)
+    days_diff = (now - reference_date).days
+    
+    # Calculate cycles since reference (28 days per cycle)
+    cycles_diff = days_diff // 28
+    
+    # Calculate the current cycle number
+    current_cycle_num = reference_cycle + cycles_diff
+    
+    # Format: YYMM where YY=year, MM=sequence within year (01-13)
+    year = current_cycle_num // 100
+    sequence = current_cycle_num % 100
+    
+    # Handle year transitions (if needed)
+    # If sequence is negative, adjust year and sequence
+    if sequence <= 0:
+        year -= 1
+        sequence += 13
+    # If sequence is > 13, adjust year and sequence
+    elif sequence > 13:
+        year += 1
+        sequence -= 13
+    
+    # Format the cycle as YYMM
+    current_cycle = f"{year:02d}{sequence:02d}"
+    
+    logging.info(f"Calculated AIRAC cycle: {current_cycle} (effective from cycle date)")
+    
+    return current_cycle
 
 
 def convert_csv_to_dat(csv_file: str, earth_fix_path: str, earth_nav_path: str, output_file: str) -> None:
