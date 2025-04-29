@@ -153,7 +153,6 @@ def load_fixed_width_data(filepath: str, key_index: int, value_index: int,
                     value = parts[value_index]
                     data[key] = value
                     
-        logging.info(f"Successfully loaded {len(data)} entries from {filepath}")
         return data
         
     except Exception as e:
