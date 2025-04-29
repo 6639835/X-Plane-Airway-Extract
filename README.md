@@ -8,8 +8,6 @@
 
 A powerful utility that saves X-Plane enthusiasts countless hours by automating the tedious process of creating properly formatted airway files. Say goodbye to manual area code lookups forever!
 
-![X-Plane Banner](https://via.placeholder.com/800x200?text=X-Plane+Airways+Made+Easy)
-
 ## 📋 Table of Contents
 
 - [🚀 Introduction](#introduction)
@@ -251,7 +249,5 @@ For support, questions, or just to share your success stories:
 ---
 
 <p align="center">
-  <img src="https://static.wikia.nocookie.net/flight/images/d/d4/XPlane12-Placeholder.png/revision/latest?cb=20210927132744" alt="X-Plane Logo" width="1280" height="720">
-  <br>
   <i>Happy Flying!</i>
 </p>
